@@ -5,9 +5,7 @@ __pycache__/
 venv/
 
 # Env files (never commit real secrets)
-.env
-.env.local
-*.env
+.env*
 !*.env.example
 
 # Node / Next.js (Fase 3+)

@@ -63,7 +63,7 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 ## Status atual
 
 - [x] **Fase 1 — Fundação:** schema, RLS, função de match, buckets. APLICADO.
-- [x] **Fase 2 — Worker:** código pronto (`worker/`). EM DEPLOY no Render.
+- [x] **Fase 2 — Worker:** deploy concluído no Render — `https://memopic-fdxa.onrender.com`. `/health` OK.
 - [ ] **Fase 3 — App (cliente):** cadastro + selfie + busca + galeria de resultados.
 - [ ] **Fase 4 — Venda:** seleção, carrinho, Pix (Mercado Pago), entrega em alta.
 - [ ] **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel, parâmetros.
@@ -78,11 +78,16 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 
 ## Próximos passos imediatos
 
-1. Concluir o deploy do worker no Render e obter a URL pública.
-2. Iniciar o app Next.js na Vercel: scaffolding + login Supabase + os 3 perfis.
-3. Configurar variáveis de ambiente no app: `NEXT_PUBLIC_SUPABASE_URL`,
+1. Iniciar o app Next.js na Vercel: scaffolding + login Supabase + os 3 perfis.
+2. Configurar variáveis de ambiente no app: `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`, e (server-only) `SUPABASE_SERVICE_ROLE_KEY`,
-   `WORKER_URL`, `WORKER_SECRET`.
+   `WORKER_URL` (`https://memopic-fdxa.onrender.com`), `WORKER_SECRET`.
+
+> Atenção memória: o worker roda no plano free do Render (512MB RAM). O
+> `FaceAnalysis(name="buffalo_l")` carrega 5 modelos por padrão; se
+> `/process-photo` ou `/search` derem erro de memória com fotos reais,
+> restringir com `allowed_modules=["detection","recognition"]` (os únicos
+> usados pelo código).
 
 ## Variáveis de ambiente
 
