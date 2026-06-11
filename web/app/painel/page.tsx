@@ -68,6 +68,13 @@ export default async function PainelPage() {
           </form>
         </div>
 
+        <Link
+          href="/painel/vendas"
+          className="block w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm font-medium transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+        >
+          Vendas
+        </Link>
+
         {profile?.role === "admin" && (
           <Link
             href="/painel/admin"

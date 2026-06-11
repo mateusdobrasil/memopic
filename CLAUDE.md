@@ -61,7 +61,9 @@ RLS ativo em tudo. Função-chave: `match_photos_by_face(query_embedding, thresh
 Arquivo de origem: `01_schema_fundacao.sql`. Fase 4 adicionou colunas de
 pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
 `pix_qr_code_base64`, `pix_ticket_url`, `pix_expires_at`) via
-`02_fase4_pedidos.sql`.
+`02_fase4_pedidos.sql`. Fase 7 adicionou `app_settings.photographer_share_percent`
+e a função `photographer_sales()` via `03_fase7_vendas_fotografo.sql`
+(**ainda não aplicado no Supabase** — rodar antes de testar `/painel/vendas`).
 
 ## Pagamentos (Fase 4)
 
@@ -142,6 +144,23 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
   negativos, cobre as bordas sem buracos), opacidade 115/255. Antes era um
   grid sem rotação apesar do docstring dizer "diagonal".
 
+## Vendas do fotógrafo (Fase 7)
+
+- **`/painel/vendas`**: lista as fotos vendidas (pedidos `paid`) do
+  fotógrafo logado — miniatura, evento, data do pagamento, valor pago pelo
+  cliente e o repasse calculado (`price_cents * photographer_share_percent
+  / 100`), mais um resumo com total e repasse agregados.
+- **`photographer_sales()`** (`03_fase7_vendas_fotografo.sql`): função
+  `security definer` — `order_items_select`/`orders_select` não dão ao
+  fotógrafo acesso de leitura a essas tabelas (são do cliente/admin), então
+  o join `order_items → orders → photos → events` roda com privilégio
+  elevado, sempre filtrado por `e.photographer_id = auth.uid()` (cada
+  fotógrafo só vê as próprias vendas pagas).
+- **`photographer_share_percent`**: novo campo em `app_settings`
+  (padrão `70`, ou seja 70% pro fotógrafo), editável em `/painel/admin`
+  via `updateSettings` — mesmo padrão dos outros parâmetros.
+- Link "Vendas" adicionado em `/painel` (visível pra fotógrafo e admin).
+
 ## Status atual
 
 - [x] **Fase 1 — Fundação:** schema, RLS, função de match, buckets. APLICADO.
@@ -161,6 +180,10 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
   em `/termos`, linkado do consentimento/cadastro/footer, e marca d'água com
   rotação diagonal de verdade. Ver seção "Termos LGPD + marca d'água (Fase
   6)" acima.
+- [x] **Fase 7 — Vendas do fotógrafo:** painel `/painel/vendas` mostra fotos
+  vendidas e o repasse calculado por `photographer_share_percent`. Ver seção
+  "Vendas do fotógrafo (Fase 7)" acima. **Falta rodar
+  `03_fase7_vendas_fotografo.sql` no Supabase.**
 
 ## Worker — rotas (já implementadas)
 
@@ -171,17 +194,23 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
 
 ## Próximos passos imediatos
 
-1. Promover via SQL um usuário de teste para `photographer` (e outro para
+1. Rodar `03_fase7_vendas_fotografo.sql` no SQL Editor do Supabase
+   (cria `app_settings.photographer_share_percent` e a função
+   `photographer_sales()`) — sem isso `/painel/vendas` mostra 0 vendas e
+   `/painel/admin` mostra repasse padrão (70%) sem conseguir salvar de
+   verdade.
+2. Promover via SQL um usuário de teste para `photographer` (e outro para
    `admin`) e testar o painel ponta a ponta (criar evento, subir fotos,
-   publicar, conferir em `/busca` como `customer`).
-2. Deploy do app `web/` na Vercel, configurando todas as variáveis de
+   publicar, conferir em `/busca` como `customer`, comprar uma foto e
+   conferir `/painel/vendas`).
+3. Deploy do app `web/` na Vercel, configurando todas as variáveis de
    ambiente (ver seção abaixo) — depois configurar o webhook do Mercado Pago
    com a URL pública e copiar `MERCADOPAGO_WEBHOOK_SECRET`.
-3. Redeploy do worker no Render para aplicar o novo `make_preview` (marca
+4. Redeploy do worker no Render para aplicar o novo `make_preview` (marca
    d'água diagonal) — depois, re-chamar `/process-photo` para a foto de
    teste (`photos.id = 13112b78-b9c6-4825-ad7f-6256ec3f3b7a`, evento "Teste
    Fase 5 (pode apagar)") pra gerar uma nova prévia e conferir visualmente.
-4. Preencher `[razão social / CNPJ — preencher]` e o e-mail de contato em
+5. Preencher `[razão social / CNPJ — preencher]` e o e-mail de contato em
    `web/app/termos/page.tsx` com os dados reais da empresa antes de ir pra
    produção.
 

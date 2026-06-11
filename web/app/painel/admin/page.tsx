@@ -9,6 +9,7 @@ const SETTINGS_KEYS = [
   "max_results",
   "default_price_cents",
   "biometric_consent_version",
+  "photographer_share_percent",
 ] as const;
 
 export default async function AdminPage() {
@@ -38,6 +39,9 @@ export default async function AdminPage() {
   const maxResults = Number(values.max_results ?? 60);
   const defaultPriceCents = Number(values.default_price_cents ?? 500);
   const consentVersion = String(values.biometric_consent_version ?? "1.0");
+  const photographerSharePercent = Number(
+    values.photographer_share_percent ?? 70,
+  );
 
   return (
     <main className="flex flex-1 flex-col px-6 py-8">
@@ -121,6 +125,29 @@ export default async function AdminPage() {
             />
             <p className="text-xs text-zinc-500">
               Alterar exige que clientes aceitem o termo novamente.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label
+              htmlFor="photographer_share_percent"
+              className="text-sm text-zinc-500"
+            >
+              Repasse ao fotógrafo (%)
+            </label>
+            <input
+              id="photographer_share_percent"
+              name="photographer_share_percent"
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              defaultValue={photographerSharePercent}
+              className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            />
+            <p className="text-xs text-zinc-500">
+              Percentual do valor de cada foto vendida repassado ao
+              fotógrafo.
             </p>
           </div>
 

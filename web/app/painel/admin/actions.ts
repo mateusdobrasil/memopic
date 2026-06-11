@@ -27,6 +27,9 @@ export async function updateSettings(formData: FormData) {
   const consentVersion = (
     formData.get("biometric_consent_version") as string
   )?.trim();
+  const photographerSharePercent = Number(
+    formData.get("photographer_share_percent"),
+  );
 
   if (!Number.isFinite(matchThreshold) || matchThreshold <= 0 || matchThreshold > 2) {
     throw new Error("Limiar de busca inválido");
@@ -40,12 +43,20 @@ export async function updateSettings(formData: FormData) {
   if (!consentVersion) {
     throw new Error("Versão do termo é obrigatória");
   }
+  if (
+    !Number.isFinite(photographerSharePercent) ||
+    photographerSharePercent < 0 ||
+    photographerSharePercent > 100
+  ) {
+    throw new Error("Repasse ao fotógrafo inválido");
+  }
 
   const updates: { key: string; value: number | string }[] = [
     { key: "match_threshold", value: matchThreshold },
     { key: "max_results", value: maxResults },
     { key: "default_price_cents", value: defaultPriceCents },
     { key: "biometric_consent_version", value: consentVersion },
+    { key: "photographer_share_percent", value: photographerSharePercent },
   ];
 
   for (const { key, value } of updates) {
