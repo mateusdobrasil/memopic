@@ -130,6 +130,14 @@ export default function SignupPage() {
           >
             {loading ? "Criando conta..." : "Criar conta"}
           </button>
+
+          <p className="text-center text-xs text-zinc-500">
+            Ao se cadastrar, você concorda com nossos{" "}
+            <Link href="/termos" className="underline" target="_blank">
+              Termos de uso e privacidade
+            </Link>
+            .
+          </p>
         </form>
 
         <p className="text-center text-sm text-zinc-500">

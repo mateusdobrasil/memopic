@@ -95,13 +95,13 @@ def get_settings():
 
 
 def make_preview(pil: Image.Image, max_side: int = 1600) -> bytes:
-    """Gera uma prévia reduzida com marca d'água 'MemoPic' repetida na diagonal."""
+    """Gera uma prévia reduzida com marca d'água 'MemoPic' repetida em diagonal (-30°)."""
     im = pil.copy()
     im.thumbnail((max_side, max_side))
     base = im.convert("RGBA")
 
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
+
     size = max(20, base.size[0] // 16)
     try:
         font = ImageFont.truetype(FONT_PATH, size=size)
@@ -109,10 +109,25 @@ def make_preview(pil: Image.Image, max_side: int = 1600) -> bytes:
         font = ImageFont.load_default()
 
     text = "MemoPic"
-    step = max(140, base.size[0] // 4)
+
+    # Mede o texto e cria um tile com folga (padding) para a rotação não cortar nada.
+    left, top, right, bottom = font.getbbox(text)
+    text_w, text_h = right - left, bottom - top
+    pad = max(4, size // 5)
+    tile_w, tile_h = text_w + 2 * pad, text_h + 2 * pad
+
+    tile = Image.new("RGBA", (tile_w, tile_h), (0, 0, 0, 0))
+    tile_draw = ImageDraw.Draw(tile)
+    tile_draw.text((pad - left, pad - top), text, fill=(255, 255, 255, 115), font=font)
+
+    # Gira o tile (com folga extra do canvas) pra marca ficar na diagonal.
+    tile = tile.rotate(-30, expand=True, resample=Image.BICUBIC)
+
+    # Espalha o tile girado em grade, cobrindo além das bordas pra não deixar buracos.
+    step = max(180, base.size[0] // 3)
     for y in range(-step, base.size[1] + step, step):
         for x in range(-step, base.size[0] + step, step):
-            draw.text((x, y), text, fill=(255, 255, 255, 80), font=font)
+            overlay.paste(tile, (x, y), tile)
 
     out = Image.alpha_composite(base, overlay).convert("RGB")
     buf = io.BytesIO()

@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { formatPriceCents } from "@/lib/format";
 import { recordConsent } from "./actions";
@@ -179,6 +180,11 @@ export function BuscaClient({
               sua conta e você pode solicitar a exclusão a qualquer momento.
             </p>
             <p>Versão do termo: {requiredVersion}</p>
+            <p>
+              <Link href="/termos" target="_blank" className="underline">
+                Leia os termos completos
+              </Link>
+            </p>
           </div>
 
           {consentError && (

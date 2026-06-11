@@ -84,6 +84,64 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
   pedidos `pending` para as mesmas fotos (mitigado client-side, mas sem
   limpeza automática de pedidos órfãos ainda — fica para Fase 5+).
 
+## Painel — Fotógrafo + Admin (Fase 5)
+
+- **Fotógrafo (`/painel`):** lista os próprios eventos (`events` filtrado por
+  `photographer_id = auth.uid()`) com contagem de fotos e botão "+ Novo
+  evento" (`/painel/eventos/novo`).
+- **Evento (`/painel/eventos/[eventId]`):** form de edição (nome, cidade,
+  data, descrição, status draft/published/archived) via `updateEvent`
+  (`web/app/painel/eventos/actions.ts`) — só `published` aparece na busca dos
+  clientes (`events_select`).
+- **Upload de fotos (`web/app/painel/eventos/[eventId]/event-photos.tsx`):**
+  client component. Para cada arquivo: gera `id = crypto.randomUUID()`, sobe
+  pro bucket `originals` em `${eventId}/${id}.${ext}` com o client de **sessão**
+  (RLS `originals_rw` exige `owner = auth.uid()`), insere `photos` (mesmo
+  `id`, `price_cents = app_settings.default_price_cents`,
+  `status = 'processing'`) e chama `POST /api/photos/process` — esse endpoint
+  (server-to-server, `X-Worker-Secret`) aciona `${WORKER_URL}/process-photo`,
+  que já atualiza `status/preview_path/faces_count/width/height` antes de
+  responder (sem polling). Upload sequencial (um arquivo por vez) por causa do
+  worker no plano free do Render.
+- **Preço por foto:** editável inline (`updatePhotoPrice`); **remover foto**
+  (`deletePhoto`) usa o **admin client** (`service_role`) pra apagar de
+  `originals`/`previews` — `previews` não tem policy de delete pra usuário
+  comum — e depois deleta a linha de `photos` (cascade em `faces`) com o
+  client de sessão.
+- **Admin (`/painel/admin`):** form de `app_settings`
+  (`match_threshold`, `max_results`, `default_price_cents`,
+  `biometric_consent_version`) via `updateSettings`
+  (`web/app/painel/admin/actions.ts`), client de sessão (RLS `settings_write`
+  exige `is_admin()`, sem precisar de `service_role`). `match_threshold`/
+  `max_results` já são lidos pelo worker em todo `/search`
+  (`worker/main.py:get_settings`); `default_price_cents` só afeta fotos
+  novas.
+- **Promoção de papel:** `photographer`/`admin` ainda são definidos só via
+  SQL direto no Supabase (`update profiles set role = ...`), porque
+  `prevent_role_escalation()` bloqueia troca de role fora de admin e ainda
+  não há UI para isso.
+
+## Termos LGPD + marca d'água (Fase 6)
+
+- **`/termos`** (`web/app/termos/page.tsx`): página pública (sem login) com
+  o texto real dos Termos de Uso e Privacidade — identificação do
+  controlador (placeholder `[razão social / CNPJ — preencher]`, ajustar
+  antes de ir pra produção), dados coletados (cadastro, biométricos, fotos
+  de eventos), base legal, compartilhamento (Supabase/Mercado Pago),
+  retenção/exclusão, direitos do titular (LGPD art. 18) e contato. Lê
+  `app_settings.biometric_consent_version` (mesmo padrão de
+  `busca/page.tsx`) e mostra "Versão vigente: X" — quando essa versão muda,
+  o fluxo de re-consentimento em `/busca` já força novo aceite.
+- Linkada de três lugares: tela de consentimento biométrico em
+  `busca-client.tsx` ("Leia os termos completos"), aviso abaixo do botão de
+  cadastro em `signup/page.tsx`, e um **footer global** novo em
+  `web/app/layout.tsx` (visível em todas as páginas).
+- **Marca d'água** (`worker/main.py:make_preview`): reescrita pra gerar um
+  tile de texto "MemoPic" rotacionado -30° (`Image.rotate(expand=True)`) e
+  espalhado em grade com `Image.paste(tile, (x, y), tile)` (suporta offsets
+  negativos, cobre as bordas sem buracos), opacidade 115/255. Antes era um
+  grid sem rotação apesar do docstring dizer "diagonal".
+
 ## Status atual
 
 - [x] **Fase 1 — Fundação:** schema, RLS, função de match, buckets. APLICADO.
@@ -95,8 +153,14 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
 - [x] **Fase 4 — Venda:** seleção (`/busca`), carrinho/checkout (`/checkout/[id]`)
   com Pix via Mercado Pago, confirmação por webhook + polling, entrega em
   alta via URL assinada (`/pedidos`, `/pedidos/[id]`).
-- [ ] **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel, parâmetros.
-- [ ] **Fase 6 — Acabamento:** termos de consentimento (LGPD), refino da marca d'água.
+- [x] **Fase 5 — Fotógrafo + Admin:** painel do fotógrafo (eventos +
+  upload de fotos com preço, processamento via worker), painel do admin
+  (parâmetros em `app_settings`). Ver seção "Painel — Fotógrafo + Admin"
+  acima.
+- [x] **Fase 6 — Acabamento:** termos de consentimento (LGPD) com texto real
+  em `/termos`, linkado do consentimento/cadastro/footer, e marca d'água com
+  rotação diagonal de verdade. Ver seção "Termos LGPD + marca d'água (Fase
+  6)" acima.
 
 ## Worker — rotas (já implementadas)
 
@@ -107,13 +171,19 @@ pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
 
 ## Próximos passos imediatos
 
-1. Rodar `02_fase4_pedidos.sql` no Supabase (se ainda não rodado) e preencher
-   `SUPABASE_SERVICE_ROLE_KEY` e `MERCADOPAGO_ACCESS_TOKEN` em `web/.env.local`.
+1. Promover via SQL um usuário de teste para `photographer` (e outro para
+   `admin`) e testar o painel ponta a ponta (criar evento, subir fotos,
+   publicar, conferir em `/busca` como `customer`).
 2. Deploy do app `web/` na Vercel, configurando todas as variáveis de
    ambiente (ver seção abaixo) — depois configurar o webhook do Mercado Pago
    com a URL pública e copiar `MERCADOPAGO_WEBHOOK_SECRET`.
-3. **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel do
-   fotógrafo, parâmetros do admin (`match_threshold`, preços).
+3. Redeploy do worker no Render para aplicar o novo `make_preview` (marca
+   d'água diagonal) — depois, re-chamar `/process-photo` para a foto de
+   teste (`photos.id = 13112b78-b9c6-4825-ad7f-6256ec3f3b7a`, evento "Teste
+   Fase 5 (pode apagar)") pra gerar uma nova prévia e conferir visualmente.
+4. Preencher `[razão social / CNPJ — preencher]` e o e-mail de contato em
+   `web/app/termos/page.tsx` com os dados reais da empresa antes de ir pra
+   produção.
 
 > Atenção memória: o worker roda no plano free do Render (512MB RAM). O
 > `FaceAnalysis(name="buffalo_l")` carrega 5 modelos por padrão; se
