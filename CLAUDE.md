@@ -20,7 +20,7 @@ parceiros) e **customer** (cliente interessado nas fotos).
 - **Reconhecimento facial:** **InsightFace** (modelo `buffalo_l`, embeddings de 512d),
   rodando num **worker Python (FastAPI)** separado, hospedado no **Render** (ou
   Hugging Face Spaces). CPU, plano gratuito.
-- **Pagamento:** Mercado Pago (Pix). [ainda não implementado]
+- **Pagamento:** Mercado Pago (Pix). Implementado na Fase 4 (`web/lib/mercadopago.ts`).
 
 ## Arquitetura — DOIS lugares de deploy
 
@@ -58,7 +58,31 @@ Schema completo aplicado no Supabase. Tabelas principais:
 `profiles`, `events`, `photos`, `faces` (vector 512), `customer_faces`,
 `orders`, `order_items`, `consents`, `app_settings`.
 RLS ativo em tudo. Função-chave: `match_photos_by_face(query_embedding, threshold, max)`.
-Arquivo de origem: `01_schema_fundacao.sql`.
+Arquivo de origem: `01_schema_fundacao.sql`. Fase 4 adicionou colunas de
+pagamento (`profiles.cpf`, `orders.payer_cpf`, `pix_qr_code`,
+`pix_qr_code_base64`, `pix_ticket_url`, `pix_expires_at`) via
+`02_fase4_pedidos.sql`.
+
+## Pagamentos (Fase 4)
+
+- **Fluxo:** `/busca` (seleção) → `createOrder` (`web/app/checkout/actions.ts`)
+  cria `orders`/`order_items` e chama `createPixPayment`
+  (`web/lib/mercadopago.ts`) → `/checkout/[orderId]` mostra QR + copia-e-cola
+  e faz polling em `/api/orders/[orderId]/status` a cada 5s → quando `paid`,
+  redireciona para `/pedidos/[orderId]` (download em alta via URL assinada).
+- **Idempotência:** tanto o webhook (`/api/webhooks/mercadopago`) quanto o
+  polling fazem `update orders set status='paid' ... where status='pending'`
+  — qualquer um dos dois que rodar primeiro "vence", sem duplicar.
+- **Assinatura do webhook:** validada via `verifyWebhookSignature` quando
+  `MERCADOPAGO_WEBHOOK_SECRET` está configurado. Antes do deploy (ou em
+  localhost) essa env var fica vazia e a verificação é pulada — a proteção
+  real nesse caso é a confirmação server-to-server via
+  `GET /v1/payments/{id}` com nosso `MERCADOPAGO_ACCESS_TOKEN`.
+- **Entrega:** `/pedidos/[orderId]` gera URLs assinadas do bucket `originals`
+  com TTL de 1h (`createSignedUrl`, via `lib/supabase/admin.ts`).
+- **Limitação conhecida:** duplo clique em "Gerar Pix" pode criar dois
+  pedidos `pending` para as mesmas fotos (mitigado client-side, mas sem
+  limpeza automática de pedidos órfãos ainda — fica para Fase 5+).
 
 ## Status atual
 
@@ -68,7 +92,9 @@ Arquivo de origem: `01_schema_fundacao.sql`.
   Implementado em `web/` (Next.js 16 + `@supabase/ssr`), testado localmente
   ponta a ponta (signup/login, redirect por role, consentimento LGPD,
   upload de selfie → `/api/search` → galeria com seleção).
-- [ ] **Fase 4 — Venda:** seleção, carrinho, Pix (Mercado Pago), entrega em alta.
+- [x] **Fase 4 — Venda:** seleção (`/busca`), carrinho/checkout (`/checkout/[id]`)
+  com Pix via Mercado Pago, confirmação por webhook + polling, entrega em
+  alta via URL assinada (`/pedidos`, `/pedidos/[id]`).
 - [ ] **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel, parâmetros.
 - [ ] **Fase 6 — Acabamento:** termos de consentimento (LGPD), refino da marca d'água.
 
@@ -81,12 +107,13 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 
 ## Próximos passos imediatos
 
-1. Deploy do app `web/` na Vercel, configurando as variáveis de ambiente
-   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `WORKER_URL`,
-   `WORKER_SECRET`) — mesmos valores de `web/.env.local`.
-2. **Fase 4 — Venda:** seleção de fotos (já existe na UI de `/busca`),
-   carrinho/pedido (`orders`/`order_items`), checkout via Pix (Mercado Pago)
-   e entrega da foto em alta (URL assinada do bucket `originals`).
+1. Rodar `02_fase4_pedidos.sql` no Supabase (se ainda não rodado) e preencher
+   `SUPABASE_SERVICE_ROLE_KEY` e `MERCADOPAGO_ACCESS_TOKEN` em `web/.env.local`.
+2. Deploy do app `web/` na Vercel, configurando todas as variáveis de
+   ambiente (ver seção abaixo) — depois configurar o webhook do Mercado Pago
+   com a URL pública e copiar `MERCADOPAGO_WEBHOOK_SECRET`.
+3. **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel do
+   fotógrafo, parâmetros do admin (`match_threshold`, preços).
 
 > Atenção memória: o worker roda no plano free do Render (512MB RAM). O
 > `FaceAnalysis(name="buffalo_l")` carrega 5 modelos por padrão; se
@@ -98,5 +125,7 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 
 **Worker (Render):** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_SECRET`.
 **App (Vercel/`web/`):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`WORKER_URL` (server-only), `WORKER_SECRET` (server-only). Não usa
-`SUPABASE_SERVICE_ROLE_KEY` — RLS via cookies de sessão do usuário é suficiente.
+`WORKER_URL` (server-only), `WORKER_SECRET` (server-only),
+`SUPABASE_SERVICE_ROLE_KEY` (server-only, Fase 4: confirmação de pagamento e
+URLs assinadas de `originals`), `MERCADOPAGO_ACCESS_TOKEN` (server-only),
+`MERCADOPAGO_WEBHOOK_SECRET` (server-only, configurar após o deploy).

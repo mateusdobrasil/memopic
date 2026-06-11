@@ -14,7 +14,7 @@ export default async function BuscaPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, cpf")
     .eq("id", user.id)
     .single();
 
@@ -46,6 +46,7 @@ export default async function BuscaPage() {
     <BuscaClient
       hasValidConsent={hasValidConsent}
       requiredVersion={requiredVersion}
+      customerCpf={profile?.cpf ?? ""}
     />
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatPriceCents } from "@/lib/format";
 import { recordConsent } from "./actions";
+import { createOrder } from "../checkout/actions";
 
 type Match = {
   photo_id: string;
@@ -20,16 +22,19 @@ type SearchResponse = {
   error?: string;
 };
 
-type Stage = "consent" | "upload" | "results";
+type Stage = "consent" | "upload" | "results" | "checkout";
 
 export function BuscaClient({
   hasValidConsent,
   requiredVersion,
+  customerCpf,
 }: {
   hasValidConsent: boolean;
   requiredVersion: string;
+  customerCpf: string;
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const [stage, setStage] = useState<Stage>(
     hasValidConsent ? "upload" : "consent",
   );
@@ -43,6 +48,10 @@ export function BuscaClient({
   const [matches, setMatches] = useState<Match[] | null>(null);
   const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const [cpf, setCpf] = useState(customerCpf);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isCheckoutPending, startCheckoutTransition] = useTransition();
 
   function handleAgree() {
     setConsentError(null);
@@ -121,7 +130,22 @@ export function BuscaClient({
   }
 
   function handleCheckout() {
-    alert("Finalização de compra em breve!");
+    setCheckoutError(null);
+    setStage("checkout");
+  }
+
+  function handleGeneratePix() {
+    setCheckoutError(null);
+    startCheckoutTransition(async () => {
+      try {
+        const { orderId } = await createOrder(Array.from(selected), cpf);
+        router.push(`/checkout/${orderId}`);
+      } catch {
+        setCheckoutError(
+          "Não foi possível criar o pedido. Tente novamente.",
+        );
+      }
+    });
   }
 
   function handleRetry() {
@@ -257,6 +281,93 @@ export function BuscaClient({
     );
   }
 
+  const selectedMatches = matches.filter((m) => selected.has(m.photo_id));
+  const totalCents = selectedMatches.reduce(
+    (sum, m) => sum + m.price_cents,
+    0,
+  );
+
+  if (stage === "checkout") {
+    return (
+      <main className="flex flex-1 flex-col px-4 pb-8 pt-8">
+        <h1 className="mb-4 text-center text-2xl font-semibold">
+          Resumo do pedido
+        </h1>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {selectedMatches.map((match) => {
+            const { data } = supabase.storage
+              .from("previews")
+              .getPublicUrl(match.preview_path);
+
+            return (
+              <div
+                key={match.photo_id}
+                className="relative overflow-hidden rounded-lg"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={data.publicUrl}
+                  alt="Foto do evento"
+                  className="aspect-square w-full object-cover"
+                />
+                <span className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 text-xs font-medium text-white">
+                  {formatPriceCents(match.price_cents)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mx-auto mt-6 w-full max-w-md space-y-4">
+          <p className="text-center text-lg font-semibold">
+            Total: {formatPriceCents(totalCents)}
+          </p>
+
+          <div className="space-y-1">
+            <label htmlFor="cpf" className="text-sm text-zinc-500">
+              CPF (necessário para gerar o Pix)
+            </label>
+            <input
+              id="cpf"
+              type="text"
+              inputMode="numeric"
+              placeholder="000.000.000-00"
+              value={cpf}
+              onChange={(e) => setCpf(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-base dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
+
+          {checkoutError && (
+            <p className="text-sm text-red-600">{checkoutError}</p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setStage("results")}
+              disabled={isCheckoutPending}
+              className="flex-1 rounded-full border border-zinc-300 px-5 py-3 text-base font-medium transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={handleGeneratePix}
+              disabled={
+                isCheckoutPending || cpf.replace(/\D/g, "").length !== 11
+              }
+              className="flex-1 rounded-full bg-black px-5 py-3 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+            >
+              {isCheckoutPending ? "Gerando..." : "Gerar Pix"}
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-1 flex-col px-4 pb-28 pt-8">
       <h1 className="mb-4 text-center text-2xl font-semibold">
@@ -307,7 +418,7 @@ export function BuscaClient({
           disabled={selected.size === 0}
           className="mx-auto block w-full max-w-md rounded-full bg-black px-5 py-3 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
         >
-          Finalizar compra ({selected.size})
+          Finalizar compra ({selected.size}) — {formatPriceCents(totalCents)}
         </button>
       </div>
     </main>
