@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env files (never commit real secrets)
+.env
+.env.local
+*.env
+!*.env.example
+
+# Node / Next.js (Fase 3+)
+node_modules/
+.next/
+out/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
