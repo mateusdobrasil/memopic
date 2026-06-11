@@ -96,12 +96,17 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Impede que um usuário comum se promova a admin sozinho
+-- Impede que um usuário comum se promova a admin sozinho.
+-- auth.uid() só existe em requisições autenticadas via API (PostgREST/Auth);
+-- conexões diretas (SQL Editor, migrations, service_role) têm auth.uid() nulo
+-- e são tratadas como acesso administrativo direto ao banco.
 create or replace function public.prevent_role_escalation()
 returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
-  if (new.role is distinct from old.role) and not public.is_admin() then
+  if (new.role is distinct from old.role)
+     and auth.uid() is not null
+     and not public.is_admin() then
     raise exception 'Apenas administradores podem alterar o papel do usuário.';
   end if;
   return new;

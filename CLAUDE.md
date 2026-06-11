@@ -64,7 +64,10 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 
 - [x] **Fase 1 — Fundação:** schema, RLS, função de match, buckets. APLICADO.
 - [x] **Fase 2 — Worker:** deploy concluído no Render — `https://memopic-fdxa.onrender.com`. `/health` OK.
-- [ ] **Fase 3 — App (cliente):** cadastro + selfie + busca + galeria de resultados.
+- [x] **Fase 3 — App (cliente):** cadastro + selfie + busca + galeria de resultados.
+  Implementado em `web/` (Next.js 16 + `@supabase/ssr`), testado localmente
+  ponta a ponta (signup/login, redirect por role, consentimento LGPD,
+  upload de selfie → `/api/search` → galeria com seleção).
 - [ ] **Fase 4 — Venda:** seleção, carrinho, Pix (Mercado Pago), entrega em alta.
 - [ ] **Fase 5 — Fotógrafo + Admin:** upload de fotos/eventos, painel, parâmetros.
 - [ ] **Fase 6 — Acabamento:** termos de consentimento (LGPD), refino da marca d'água.
@@ -78,10 +81,12 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 
 ## Próximos passos imediatos
 
-1. Iniciar o app Next.js na Vercel: scaffolding + login Supabase + os 3 perfis.
-2. Configurar variáveis de ambiente no app: `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, e (server-only) `SUPABASE_SERVICE_ROLE_KEY`,
-   `WORKER_URL` (`https://memopic-fdxa.onrender.com`), `WORKER_SECRET`.
+1. Deploy do app `web/` na Vercel, configurando as variáveis de ambiente
+   (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `WORKER_URL`,
+   `WORKER_SECRET`) — mesmos valores de `web/.env.local`.
+2. **Fase 4 — Venda:** seleção de fotos (já existe na UI de `/busca`),
+   carrinho/pedido (`orders`/`order_items`), checkout via Pix (Mercado Pago)
+   e entrega da foto em alta (URL assinada do bucket `originals`).
 
 > Atenção memória: o worker roda no plano free do Render (512MB RAM). O
 > `FaceAnalysis(name="buffalo_l")` carrega 5 modelos por padrão; se
@@ -92,5 +97,6 @@ Arquivo de origem: `01_schema_fundacao.sql`.
 ## Variáveis de ambiente
 
 **Worker (Render):** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_SECRET`.
-**App (Vercel):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY` (server-only), `WORKER_URL`, `WORKER_SECRET`.
+**App (Vercel/`web/`):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`WORKER_URL` (server-only), `WORKER_SECRET` (server-only). Não usa
+`SUPABASE_SERVICE_ROLE_KEY` — RLS via cookies de sessão do usuário é suficiente.
