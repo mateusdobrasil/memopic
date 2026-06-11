@@ -141,8 +141,12 @@ export function EventPhotos({
 
   function handleDelete(photoId: string) {
     startTransition(async () => {
-      await deletePhoto(photoId);
-      setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+      const result = await deletePhoto(photoId);
+      if (result.status === "hidden") {
+        updatePhoto(photoId, { status: "hidden" });
+      } else {
+        setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+      }
     });
   }
 
@@ -249,6 +253,12 @@ function PhotoCard({
         </p>
       )}
 
+      {photo.status === "hidden" && (
+        <p className="text-center text-xs text-zinc-500">
+          Vendida — oculta da busca
+        </p>
+      )}
+
       {photo.status === "failed" && (
         <button
           type="button"
@@ -285,14 +295,16 @@ function PhotoCard({
         Atual: {formatPriceCents(photo.price_cents)}
       </p>
 
-      <button
-        type="button"
-        onClick={() => onDelete(photo.id)}
-        disabled={isPending || photo.status === "uploading"}
-        className="w-full rounded-full border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950"
-      >
-        Remover
-      </button>
+      {photo.status !== "hidden" && (
+        <button
+          type="button"
+          onClick={() => onDelete(photo.id)}
+          disabled={isPending || photo.status === "uploading"}
+          className="w-full rounded-full border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950"
+        >
+          Remover
+        </button>
+      )}
     </div>
   );
 }

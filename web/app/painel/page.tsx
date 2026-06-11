@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { signOut } from "./actions";
+import { signOut } from "../actions";
 
 const EVENT_STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho",

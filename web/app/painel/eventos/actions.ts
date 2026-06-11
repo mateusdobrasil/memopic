@@ -74,7 +74,9 @@ export async function updatePhotoPrice(photoId: string, priceCents: number) {
   if (error) throw error;
 }
 
-export async function deletePhoto(photoId: string) {
+export async function deletePhoto(
+  photoId: string,
+): Promise<{ status: "deleted" | "hidden" }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -88,14 +90,30 @@ export async function deletePhoto(photoId: string) {
     .single();
   if (fetchErr || !photo) throw new Error("Foto não encontrada");
 
+  const { error } = await supabase.from("photos").delete().eq("id", photoId);
+
+  if (error) {
+    // Foto já vendida (order_items referencia o id, FK on delete restrict)
+    // — não pode ser apagada. Oculta da busca em vez de remover.
+    if (error.code === "23503") {
+      const { error: hideError } = await supabase
+        .from("photos")
+        .update({ status: "hidden" })
+        .eq("id", photoId);
+      if (hideError) throw hideError;
+
+      revalidatePath(`/painel/eventos/${photo.event_id}`);
+      return { status: "hidden" };
+    }
+    throw error;
+  }
+
   const admin = createAdminClient();
   await admin.storage.from("originals").remove([photo.storage_path]);
   if (photo.preview_path) {
     await admin.storage.from("previews").remove([photo.preview_path]);
   }
 
-  const { error } = await supabase.from("photos").delete().eq("id", photoId);
-  if (error) throw error;
-
   revalidatePath(`/painel/eventos/${photo.event_id}`);
+  return { status: "deleted" };
 }

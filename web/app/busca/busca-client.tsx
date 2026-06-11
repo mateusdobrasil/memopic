@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatPriceCents } from "@/lib/format";
 import { recordConsent } from "./actions";
 import { createOrder } from "../checkout/actions";
+import { signOut } from "../actions";
 
 type Match = {
   photo_id: string;
@@ -24,6 +25,19 @@ type SearchResponse = {
 };
 
 type Stage = "consent" | "upload" | "results" | "checkout";
+
+function SignOutButton() {
+  return (
+    <form action={signOut} className="absolute right-4 top-4">
+      <button
+        type="submit"
+        className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+      >
+        Sair
+      </button>
+    </form>
+  );
+}
 
 export function BuscaClient({
   hasValidConsent,
@@ -161,7 +175,8 @@ export function BuscaClient({
 
   if (stage === "consent") {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+        <SignOutButton />
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="text-2xl font-semibold">Antes de continuar</h1>
@@ -206,7 +221,8 @@ export function BuscaClient({
 
   if (stage === "upload") {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+        <SignOutButton />
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
             <h1 className="text-2xl font-semibold">Tire uma selfie</h1>
@@ -269,7 +285,8 @@ export function BuscaClient({
   // stage === "results"
   if (!matches || matches.length === 0) {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+        <SignOutButton />
         <div className="w-full max-w-md space-y-6">
           <h1 className="text-2xl font-semibold">Nenhuma foto encontrada</h1>
           <p className="text-sm text-zinc-500">
@@ -295,7 +312,8 @@ export function BuscaClient({
 
   if (stage === "checkout") {
     return (
-      <main className="flex flex-1 flex-col px-4 pb-8 pt-8">
+      <main className="relative flex flex-1 flex-col px-4 pb-8 pt-8">
+        <SignOutButton />
         <h1 className="mb-4 text-center text-2xl font-semibold">
           Resumo do pedido
         </h1>
@@ -375,7 +393,8 @@ export function BuscaClient({
   }
 
   return (
-    <main className="flex flex-1 flex-col px-4 pb-28 pt-8">
+    <main className="relative flex flex-1 flex-col px-4 pb-28 pt-8">
+      <SignOutButton />
       <h1 className="mb-4 text-center text-2xl font-semibold">
         Suas fotos ({matches.length})
       </h1>
