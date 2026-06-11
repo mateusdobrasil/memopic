@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { updateEvent } from "../actions";
 import { EventPhotos, type Photo } from "./event-photos";
+import { DeleteEventButton } from "./delete-event-button";
 
 const STATUS_OPTIONS = [
   { value: "draft", label: "Rascunho" },
@@ -162,6 +163,18 @@ export default async function EventoPage({
             defaultPriceCents={defaultPriceCents}
           />
         </div>
+
+        {isAdmin && (
+          <div className="space-y-2 rounded-lg border border-red-200 p-4 dark:border-red-900">
+            <h2 className="text-lg font-semibold">Zona de risco</h2>
+            <p className="text-sm text-zinc-500">
+              Apaga o evento e todas as fotos vinculadas a ele (originais e
+              prévias). Fotos já vendidas são preservadas (ocultadas da
+              busca) e o evento é arquivado em vez de apagado.
+            </p>
+            <DeleteEventButton eventId={eventId} />
+          </div>
+        )}
       </div>
     </main>
   );

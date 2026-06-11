@@ -74,6 +74,39 @@ export async function updatePhotoPrice(photoId: string, priceCents: number) {
   if (error) throw error;
 }
 
+type SupabaseSession = Awaited<ReturnType<typeof createClient>>;
+type SupabaseAdmin = ReturnType<typeof createAdminClient>;
+
+// Tenta apagar a linha de `photos` (e os arquivos no storage). Se a foto já
+// foi vendida, `order_items.photo_id` (FK on delete restrict) bloqueia o
+// delete com 23503 — nesse caso, oculta da busca em vez de remover, pra não
+// quebrar a entrega via /pedidos.
+async function deletePhotoRow(
+  supabase: SupabaseSession,
+  admin: SupabaseAdmin,
+  photo: { id: string; storage_path: string; preview_path: string | null },
+): Promise<"deleted" | "hidden"> {
+  const { error } = await supabase.from("photos").delete().eq("id", photo.id);
+
+  if (error) {
+    if (error.code === "23503") {
+      const { error: hideError } = await supabase
+        .from("photos")
+        .update({ status: "hidden" })
+        .eq("id", photo.id);
+      if (hideError) throw hideError;
+      return "hidden";
+    }
+    throw error;
+  }
+
+  await admin.storage.from("originals").remove([photo.storage_path]);
+  if (photo.preview_path) {
+    await admin.storage.from("previews").remove([photo.preview_path]);
+  }
+  return "deleted";
+}
+
 export async function deletePhoto(
   photoId: string,
 ): Promise<{ status: "deleted" | "hidden" }> {
@@ -85,35 +118,63 @@ export async function deletePhoto(
 
   const { data: photo, error: fetchErr } = await supabase
     .from("photos")
-    .select("event_id, storage_path, preview_path")
+    .select("id, event_id, storage_path, preview_path")
     .eq("id", photoId)
     .single();
   if (fetchErr || !photo) throw new Error("Foto não encontrada");
 
-  const { error } = await supabase.from("photos").delete().eq("id", photoId);
-
-  if (error) {
-    // Foto já vendida (order_items referencia o id, FK on delete restrict)
-    // — não pode ser apagada. Oculta da busca em vez de remover.
-    if (error.code === "23503") {
-      const { error: hideError } = await supabase
-        .from("photos")
-        .update({ status: "hidden" })
-        .eq("id", photoId);
-      if (hideError) throw hideError;
-
-      revalidatePath(`/painel/eventos/${photo.event_id}`);
-      return { status: "hidden" };
-    }
-    throw error;
-  }
-
-  const admin = createAdminClient();
-  await admin.storage.from("originals").remove([photo.storage_path]);
-  if (photo.preview_path) {
-    await admin.storage.from("previews").remove([photo.preview_path]);
-  }
+  const status = await deletePhotoRow(supabase, createAdminClient(), photo);
 
   revalidatePath(`/painel/eventos/${photo.event_id}`);
+  return { status };
+}
+
+export async function deleteEvent(
+  eventId: string,
+): Promise<{ status: "deleted" | "archived" }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("not authenticated");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") throw new Error("not authorized");
+
+  const { data: photos, error: photosErr } = await supabase
+    .from("photos")
+    .select("id, storage_path, preview_path")
+    .eq("event_id", eventId);
+  if (photosErr) throw photosErr;
+
+  const admin = createAdminClient();
+  let anyHidden = false;
+  for (const photo of photos ?? []) {
+    const status = await deletePhotoRow(supabase, admin, photo);
+    if (status === "hidden") anyHidden = true;
+  }
+
+  if (anyHidden) {
+    // Pelo menos uma foto já foi vendida e ficou oculta — o evento não pode
+    // ser apagado (photos.event_id ainda referencia ele), então arquiva.
+    const { error } = await supabase
+      .from("events")
+      .update({ status: "archived" })
+      .eq("id", eventId);
+    if (error) throw error;
+
+    revalidatePath("/painel");
+    revalidatePath(`/painel/eventos/${eventId}`);
+    return { status: "archived" };
+  }
+
+  const { error } = await supabase.from("events").delete().eq("id", eventId);
+  if (error) throw error;
+
+  revalidatePath("/painel");
   return { status: "deleted" };
 }
